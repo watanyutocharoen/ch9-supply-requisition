@@ -159,14 +159,45 @@ select.field{appearance:none;-webkit-appearance:none;background-image:linear-gra
 .wbar .ws{color:var(--muted);font-size:14px;text-align:center;flex:1;min-width:0}
 
 /* summary table */
-.tw table{min-width:620px}
-.tw td:nth-child(2),.tw th:nth-child(2){min-width:190px;white-space:normal}
+.tw table{width:100%}
+.tw td{overflow-wrap:anywhere}
 .tw td:first-child,.tw th:first-child{width:36px}
+.tw.mg table{min-width:620px}
+.tw.mg td:nth-child(2),.tw.mg th:nth-child(2){min-width:190px}
 /* จอใหญ่: ขยายพื้นที่และตัวหนังสือให้อ่านง่าย */
 @media (min-width:1200px){.wrap{max-width:1280px}body{zoom:1.1}}
 @media (min-width:1700px){body{zoom:1.25}}
 /* มือถือ: ปุ่มกดใหญ่ขึ้น ตัวหนังสืออ่านง่าย */
-@media (max-width:520px){.btn{min-height:44px}.btn.s{min-height:38px}.tab{padding:10px 16px}.badge{font-size:13px}}
+@media (max-width:520px){
+  .btn{min-height:44px}.btn.s{min-height:34px}.badge{font-size:13px}
+  /* หัวเว็บกะทัดรัด ให้เหลือที่ให้ฟอร์ม */
+  .top::before{height:4px}
+  .top .wrap{padding-block:8px;gap:6px 10px}
+  .logo{height:34px}
+  .brand{flex:1 1 120px}.brand b{font-size:16px}.brand span{display:none}
+  .me{justify-content:flex-start;gap:6px;flex:1 1 100%}
+  .chip-user{padding:3px 10px;font-size:13px}.tagr{font-size:11px}
+  .me .btn.s{padding:3px 12px;font-size:13px;min-height:30px}
+  .tab{padding:7px 14px;font-size:14px}
+  .steps{gap:6px;margin-bottom:10px}.stp{padding:5px 10px;gap:6px}.stp i{width:22px;height:22px;font-size:12px}.stp span{font-size:12px}
+  .card h2.hm{display:none}
+  .stamp{padding:7px 12px;font-size:14px;border-radius:14px}.stamp span{display:none}
+  .lbl{margin:10px 0 5px;font-size:13px}
+  .field{padding-top:9px;padding-bottom:9px}
+  .pills{grid-template-columns:1fr 1fr;gap:6px}
+  .pill{padding:8px 10px 8px 14px;gap:6px;font-size:14px;border-radius:16px}.pill .rd{width:18px;height:18px}.pill.on .rd::after{width:8px;height:8px}
+  .tw th,.tw td{padding:8px 8px}
+  .top .wrap{padding-block:5px;gap:4px 8px}
+  .logo{height:30px}.brand b{font-size:15px}
+  .me{gap:5px}.chip-user{padding:2px 9px;font-size:12px}
+  .me .btn.s{padding:2px 10px;font-size:12px;min-height:26px}
+  .tab{padding:5px 12px;font-size:13px}
+  .stp{padding:3px 8px}.stp i{width:20px;height:20px;font-size:11px}
+  .lbl{margin:7px 0 3px;font-size:12px}
+  .field{padding:6px 14px;font-size:15px}
+  .pills{gap:5px}.pill{padding:5px 8px 5px 12px;font-size:13px;border-radius:14px}
+  .card{padding:12px}
+}
 .tw{overflow-x:auto;border:1px solid var(--line);border-radius:18px}
 table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
@@ -606,7 +637,7 @@ function renderForm(){
   if(S.step===1){
     let keys=upcoming(6);if(f.cycle&&keys.indexOf(f.cycle)<0)keys.unshift(f.cycle);
     const near=nextOpenCycle();
-    body='<div class="card"><h2>ใบเบิกใหม่</h2>'
+    body='<div class="card"><h2 class="hm">ใบเบิกใหม่</h2>'
       +'<label class="lbl" for="fcycle">รอบเบิก (ทุกวันจันทร์และวันพฤหัสบดี)</label><select class="field" id="fcycle" name="cycle">'
       +keys.map(k=>{const closed=batchesOf(k).length>0;return '<option value="'+k+'"'+(f.cycle===k?' selected':'')+'>'+esc(dateLong(k))+(k===near?' • รอบที่ใกล้ที่สุด':'')+(closed?' — รวมไปแล้ว ใบใหม่จะรวมเพิ่ม':'')+'</option>';}).join('')+'</select>'
       +'<span class="lbl">วันเวลาที่คีย์เบิก</span><div class="stamp"><b id="liveTs">'+esc(thDT(Date.now()))+'</b><span>บันทึกเวลาตามที่กดส่งใบเบิก</span></div>'
@@ -872,7 +903,7 @@ function mergedTable(cy){
   const head='<tr><th class="n">#</th><th>รายการ</th>'+cy.units.map(n=>'<th class="n">'+esc(n)+'</th>').join('')+'<th class="n">รวม</th></tr>';
   const rows=cy.lines.map((l,i)=>'<tr><td class="n">'+(i+1)+'</td><td>'+esc(l.name)+'</td>'+l.q.map(q=>'<td class="n">'+(q||'–')+'</td>').join('')+'<td class="n"><b>'+l.total+'</b></td></tr>').join('');
   const tot=cy.lines.reduce((a,l)=>a+l.total,0);
-  return '<div class="tw"><table><thead>'+head+'</thead><tbody>'+rows+'<tr><td></td><td><b>รวม '+cy.lines.length+' รายการ</b></td>'+cy.units.map((n,i)=>'<td class="n"><b>'+cy.lines.reduce((a,l)=>a+l.q[i],0)+'</b></td>').join('')+'<td class="n"><b>'+tot+'</b></td></tr></tbody></table></div>';
+  return '<div class="tw mg"><table><thead>'+head+'</thead><tbody>'+rows+'<tr><td></td><td><b>รวม '+cy.lines.length+' รายการ</b></td>'+cy.units.map((n,i)=>'<td class="n"><b>'+cy.lines.reduce((a,l)=>a+l.q[i],0)+'</b></td>').join('')+'<td class="n"><b>'+tot+'</b></td></tr></tbody></table></div>';
 }
 function exportCycle(k){
   const cy=S.cycles[k];if(!cy)return;
