@@ -950,7 +950,7 @@ const initials=n=>(n||'?').trim().charAt(0);
 function renderSettings(){
   const el=$('#s-settings');
   if(!isAdmin()){el.innerHTML='<div class="card empty">เมนูนี้สำหรับแอดมินเท่านั้น</div>';return;}
-  const seg='<div class="seg">'+[['staff','เจ้าหน้าที่'],['items','รายการพัสดุ'],['units','หน่วยที่เบิก']].map(s=>'<button class="chip" type="button" data-a="setsub" data-s="'+s[0]+'" aria-pressed="'+(S.setSub===s[0])+'">'+s[1]+'</button>').join('')+'</div>';
+  const seg='<div class="seg">'+[['staff','เจ้าหน้าที่'],['items','รายการพัสดุ'],['units','หน่วยที่เบิก'],['data','ล้างข้อมูล']].map(s=>'<button class="chip" type="button" data-a="setsub" data-s="'+s[0]+'" aria-pressed="'+(S.setSub===s[0])+'">'+s[1]+'</button>').join('')+'</div>';
   let body='';
   if(S.setSub==='staff'){
     const tk=toks(S.setQ);
@@ -982,7 +982,26 @@ function renderSettings(){
         return '<div class="srow" data-id="'+esc(u.id)+'"><div class="who">'+esc(u.name)+'</div><div class="btns">'+(S.setConfirm==='del:'+u.id?'<button class="btn s d" data-a="unit-del-yes" type="button">ยืนยันลบ</button><button class="btn s" data-a="set-cancel" type="button">ยกเลิก</button>':'<button class="btn s" data-a="unit-edit" type="button">แก้ไข</button><button class="btn s d" data-a="unit-del" type="button">ลบ</button>')+'</div></div>';
       }).join('')+(S.units.length?'':'<div class="empty">ยังไม่มีหน่วย</div>')+'</div>';
   }
+  if(S.setSub==='data'){
+    const live=S.requests.length,cyn=Object.keys(S.cycles).length;
+    body='<div class="card"><div class="head"><h2>ล้างประวัติการเบิก</h2></div>'
+      +'<p class="sub" style="margin-top:8px">ลบใบเบิกทั้งหมด (รวมที่ถูกลบแบบซ่อนไว้) ประวัติการแก้ไข และรายการรวมใบเบิกทุกรอบ ใช้เคลียร์ข้อมูลหลังทดสอบระบบ ลบแล้วกู้คืนไม่ได้ ส่วนรายชื่อเจ้าหน้าที่ รายการพัสดุ และหน่วยที่เบิกจะไม่ถูกลบ</p>'
+      +'<div class="sumrow"><span class="st st0">ใบเบิก '+live+'</span><span class="st st1">รายการรวม '+cyn+'</span></div>'
+      +(S.setConfirm==='clear'
+        ?'<div class="banner red" style="margin:14px 0 0"><span>ยืนยันลบใบเบิก '+live+' ใบ และรายการรวม '+cyn+' ชุด ทั้งหมด? กู้คืนไม่ได้</span></div><div class="btns" style="margin-top:12px"><button class="btn d" data-a="clear-yes" type="button">ยืนยันล้างทั้งหมด</button><button class="btn" data-a="set-cancel" type="button">ยกเลิก</button></div>'
+        :'<div class="btns" style="margin-top:14px"><button class="btn d" data-a="clear-ask" type="button"'+((live||cyn)?'':' disabled')+'>ล้างประวัติการเบิกทั้งหมด</button>'+((live||cyn)?'':'<span class="sub">ไม่มีข้อมูลให้ล้าง</span>')+'</div>')
+      +'</div>';
+  }
   el.innerHTML=seg+body;
+}
+function clearAll(){
+  const ops=[];
+  [['requests',S.requests],['cycles',Object.values(S.cycles)]].forEach(x=>x[1].forEach(d=>ops.push({op:'delete',path:x[0]+'/'+d.id})));
+  Object.keys(S.locks).forEach(id=>ops.push({op:'delete',path:'locks/'+id}));
+  if(!ops.length){S.setConfirm=null;renderSettings();return;}
+  track('กำลังล้างประวัติการเบิก...',apiCall('write',{ops:ops}).then(()=>{ops.forEach(o=>localApply('delete',o.path));return apiPull();}))
+    .then(()=>{S.setConfirm=null;S.adCycle=null;S.stCycle=null;S.adOpen=null;toast('ล้างประวัติการเบิกทั้งหมดแล้ว');renderSettings();})
+    .catch(e=>{toast(errMsg(e));});
 }
 const rowOf=b=>b.closest('[data-id]');
 const val=(root,f)=>{const e=root.querySelector('[data-f="'+f+'"]');return e?(e.type==='checkbox'?e.checked:e.value.trim()):'';};
@@ -1039,6 +1058,8 @@ document.addEventListener('click',e=>{
     case 'unmerge':unmerge(b.getAttribute('data-k'));break;
     case 'cyc-back':backCycle(b.getAttribute('data-k'));break;
     /* settings */
+    case 'clear-ask':S.setConfirm='clear';renderSettings();break;
+    case 'clear-yes':clearAll();break;
     case 'setsub':S.setSub=b.getAttribute('data-s');S.setEdit=null;S.setConfirm=null;renderSettings();break;
     case 'set-cancel':S.setEdit=null;S.setConfirm=null;renderSettings();break;
     case 'staff-edit':S.setEdit='staff:'+rowOf(b).getAttribute('data-id');S.setConfirm=null;renderSettings();break;
