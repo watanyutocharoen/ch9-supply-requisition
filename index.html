@@ -201,6 +201,31 @@ details.lg summary{cursor:pointer;color:var(--blue);font-size:14px;margin-top:10
 .srow.edit{background:var(--surface);border-radius:16px;padding:12px}
 .addbox{background:var(--surface);border:1px dashed var(--line2);border-radius:20px;padding:14px;margin-bottom:14px}
 
+#busy{position:fixed;inset:0;z-index:90;background:rgba(255,255,255,.62);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center}
+#busy.on{display:flex}
+#busy .bx{background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:18px 26px;display:flex;align-items:center;gap:14px;font-weight:600;color:var(--blue);font-size:17px}
+.spin{width:26px;height:26px;border-radius:50%;border:3px solid var(--blue-soft);border-top-color:var(--red);animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ldv{display:flex;flex-direction:column;align-items:center;gap:14px;padding-top:90px;color:var(--blue);font-weight:600}
+.ldv .spin{width:38px;height:38px;border-width:4px}
+.stepper{display:grid;grid-template-columns:repeat(4,1fr);margin:18px 0 6px}
+.stepper .s{display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;padding:0 3px}
+.stepper .s::before{content:"";position:absolute;top:16px;right:50%;width:100%;height:4px;border-radius:4px;background:var(--line);z-index:0}
+.stepper .s:first-child::before{display:none}
+.stepper .s.done::before,.stepper .s.cur::before{background:var(--blue)}
+.stepper.fin .s.done::before{background:var(--ok)}
+.stepper .dot{width:34px;height:34px;border-radius:50%;background:#fff;border:2px solid var(--line2);display:grid;place-items:center;font-weight:700;font-size:15px;color:var(--faint);position:relative;z-index:1}
+.stepper .s.done .dot{background:var(--blue);border-color:var(--blue);color:#fff}
+.stepper.fin .s.done .dot{background:var(--ok);border-color:var(--ok)}
+.stepper .s.cur .dot{border-color:var(--red);color:var(--red);box-shadow:0 0 0 5px rgba(224,41,74,.16)}
+.stepper .lb{margin-top:9px;font-size:12.5px;line-height:1.35;color:var(--muted)}
+.stepper .s.cur .lb{color:var(--red-d);font-weight:700}
+.stepper .s.done .lb{color:var(--fg)}
+.stepper.sm{margin:12px 0 4px}.stepper.sm .dot{width:26px;height:26px;font-size:12px}.stepper.sm .s::before{top:11px;height:3px}.stepper.sm .lb{font-size:11.5px;margin-top:6px}
+.nowst{margin:10px 0 2px;padding:9px 14px;border-radius:14px;background:var(--surface);font-size:14.5px;color:var(--muted)}
+.nowst b{color:var(--blue)}
+.flash{animation:flash 1.6s ease 1}
+@keyframes flash{0%,60%{box-shadow:0 0 0 4px rgba(224,41,74,.35)}100%{box-shadow:none}}
 .credit{text-align:center;color:var(--muted);font-size:13px;line-height:1.5;padding:18px 16px calc(24px + env(safe-area-inset-bottom,0px))}
 #toast{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--fg);color:#fff;border-radius:999px;padding:10px 22px;font-size:15px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50;max-width:calc(100% - 32px);text-align:center}
 #toast.show{opacity:1;transform:translate(-50%,0)}
@@ -208,7 +233,7 @@ details.lg summary{cursor:pointer;color:var(--blue);font-size:14px;margin-top:10
 </style>
 
 <div id="app">
-  <div id="v-load" class="wrap"><p class="empty" style="padding-top:80px">กำลังเชื่อมต่อฐานข้อมูล...</p></div>
+  <div id="v-load" class="wrap"><div class="ldv"><span class="spin"></span><span>กำลังโหลดข้อมูล...</span></div></div>
 
   <div id="v-login" class="wrap" hidden>
     <form class="card login" id="loginForm" autocomplete="on">
@@ -259,6 +284,7 @@ details.lg summary{cursor:pointer;color:var(--blue);font-size:14px;margin-top:10
   </div>
 </div>
 <footer class="credit">Design &amp; Developed by ภก.วทัญญู โตเจริญนิรัติศัย</footer>
+<div id="busy" role="alert" aria-live="assertive"><div class="bx"><span class="spin"></span><span id="busyTx">กำลังบันทึก...</span></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -314,10 +340,17 @@ const cycleReqs=k=>liveReqs().filter(r=>r.cycle===k).sort((a,b)=>a.createdAt-b.c
 const isAdmin=()=>!!(S.user&&S.user.isAdmin);
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('show'),2400);}
 const errMsg=e=>{const c=e&&e.code;return c==='forbidden'?'ไม่มีสิทธิ์ทำรายการนี้':c==='last_admin'?'ต้องมีแอดมินอย่างน้อย 1 คน':c==='too_large'?'ข้อมูลใหญ่เกินไป':'บันทึกไม่สำเร็จ ลองอีกครั้ง';};
-const wr=(p,fn)=>fn(S.db.doc(p)).catch(e=>{toast(errMsg(e));throw e;});
-const setDoc=(p,d)=>wr(p,r=>r.set(d));
-const updDoc=(p,d)=>wr(p,r=>r.update(d));
-const delDoc=p=>wr(p,r=>r.delete());
+const BZ={n:0};
+function track(label,p){
+  if(label===false)return p;
+  BZ.n++;const b=$('#busy');$('#busyTx').textContent=label;b.classList.add('on');
+  const done=()=>{BZ.n=Math.max(0,BZ.n-1);if(!BZ.n)b.classList.remove('on');};
+  p.then(done,done);return p;
+}
+const wr=(p,fn,label)=>track(label===false?false:(label||'กำลังบันทึก...'),fn(S.db.doc(p))).catch(e=>{toast(errMsg(e));throw e;});
+const setDoc=(p,d,l)=>wr(p,r=>r.set(d),l);
+const updDoc=(p,d,l)=>wr(p,r=>r.update(d),l);
+const delDoc=(p,l)=>wr(p,r=>r.delete(),l||'กำลังลบ...');
 const lockInfo=id=>{const l=S.locks[id];return l&&l.until>Date.now()?l:null;};
 const typingIn=sel=>{const a=document.activeElement,r=$(sel);return !!(a&&r&&r.contains(a)&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));};
 
@@ -380,19 +413,19 @@ function emit(n){
     try{l.fn({docs:d});}catch(e){console.error(e);}});
 }
 function apiPull(){
-  if(!API.on||!API.token||API.busy)return Promise.resolve();
+  if(!API.on||!API.token)return Promise.resolve();
+  if(API.busy){API.again=true;return API.busyP;}
   API.busy=true;
-  return apiCall('pull',{vers:API.vers}).then(j=>{
+  API.busyP=apiCall('pull',{vers:API.vers}).then(j=>{
     const ch=[];
     Object.keys(j.cols||{}).forEach(n=>{const c=j.cols[n];API.vers[n]=c.ver;API.store[n]={};c.docs.forEach(d=>{API.store[n][d.id]=d;});ch.push(n);});
-    API.busy=false;
     if(S.err){S.err='';renderConn();}
     ch.forEach(emit);
   }).catch(e=>{
-    API.busy=false;
     if(e.code==='auth'){if(API.pwBusy||!API.on)return;toast('หมดเวลาหรือรหัสผ่านถูกเปลี่ยน กรุณาเข้าสู่ระบบใหม่');logout();return;}
     S.err=e.code==='network'?'ออฟไลน์':e.code;if(S.user)renderConn();
-  });
+  }).then(()=>{API.busy=false;if(API.again){API.again=false;return apiPull();}});
+  return API.busyP;
 }
 function startSync(){
   API.on=true;API.vers={};API.store={};clearInterval(API.timer);
@@ -406,13 +439,21 @@ function mkQuery(n,o){
     orderBy(f,d){return mkQuery(n,Object.assign({},o,{order:{f:f,d:d||'asc'}}));},limit(k){return mkQuery(n,Object.assign({},o,{lim:k}));}};
   return q;
 }
-const afterWrite=p=>p.then(r=>apiPull().then(()=>r));
+function localApply(op,path,data){
+  const pr=path.split('/'),c=pr[0],id=pr[1];API.store[c]=API.store[c]||{};
+  if(op==='delete')delete API.store[c][id];
+  else{const cur=API.store[c][id]||{};const nd=op==='update'?Object.assign({},cur,data):Object.assign({},data);
+    if(c==='staff'){nd.passHash=cur.passHash===undefined?null:cur.passHash;if(op==='update'&&data&&data.passHash===null)nd.passHash=null;}
+    nd.id=id;API.store[c][id]=nd;}
+  emit(c);
+}
+const afterWrite=(p,op,path,data)=>p.then(r=>{localApply(op,path,data);return apiPull().then(()=>r);});
 S.db={
   collection:n=>mkQuery(n,{}),
   doc:p=>({
-    set:d=>afterWrite(apiCall('write',{ops:[{op:'set',path:p,data:d}]})),
-    update:d=>afterWrite(apiCall('write',{ops:[{op:'update',path:p,data:d}]})),
-    delete:()=>afterWrite(apiCall('write',{ops:[{op:'delete',path:p}]})),
+    set:d=>afterWrite(apiCall('write',{ops:[{op:'set',path:p,data:d}]}),'set',p,d),
+    update:d=>afterWrite(apiCall('write',{ops:[{op:'update',path:p,data:d}]}),'update',p,d),
+    delete:()=>afterWrite(apiCall('write',{ops:[{op:'delete',path:p}]}),'delete',p),
     acquire:o=>apiCall('acquire',{id:p.split('/')[1],holder:o.holder,ttlMs:o.ttlMs,data:o.data}).then(r=>{apiPull();return {acquired:r.acquired};})
   })
 };
@@ -472,7 +513,7 @@ function doLogin(e){
   const id=$('#lid').value.replace(/\D/g,''),pw=$('#lpw').value,btn=$('#lgo');
   if(!id||!pw){err.hidden=false;err.textContent='กรอกรหัสพนักงานและรหัสผ่าน';return;}
   btn.disabled=true;btn.textContent='กำลังเข้าสู่ระบบ...';
-  pwHash(id,pw).then(h=>apiCall('login',{id:id,h:h})).then(j=>{
+  pwHash(id,pw).then(h=>track('กำลังเข้าสู่ระบบ...',apiCall('login',{id:id,h:h}))).then(j=>{
     S.fails=0;API.token=j.token;
     const ph=j.user.passHash||'';
     lsSet('ch9sup2:session',{id:id,ph:ph,token:j.token,ts:Date.now()});
@@ -504,7 +545,7 @@ function doPw(e){
   err.hidden=true;
   const u=S.user;
   const gb=$('#pwgo');gb.disabled=true;API.pwBusy=true;
-  pwHash(u.id,a).then(h=>apiCall('changePw',{h:h})).then(j=>{
+  pwHash(u.id,a).then(h=>track('กำลังบันทึกรหัสผ่าน...',apiCall('changePw',{h:h}))).then(j=>{
     API.token=j.token;
     lsSet('ch9sup2:session',{id:u.id,ph:j.user.passHash||'',token:j.token,ts:Date.now()});
     const st=Object.assign({},S.staff[u.id]||u,j.user);S.staff[u.id]=st;
@@ -546,8 +587,8 @@ function renderForm(){
     let keys=upcoming(6);if(f.cycle&&keys.indexOf(f.cycle)<0)keys.unshift(f.cycle);
     const near=nextOpenCycle();
     body='<div class="card"><h2>ใบเบิกใหม่</h2>'
-      +'<span class="lbl">รอบเบิก (ทุกวันจันทร์และวันพฤหัสบดี)</span><div class="pills" role="radiogroup" aria-label="รอบเบิก">'
-      +keys.map(k=>{const closed=!!S.cycles[k]&&k!==f.cycle;const on=f.cycle===k;return '<label class="pill'+(on?' on':'')+(closed?' off':'')+'"><span class="pt">'+esc(dateLong(k))+(k===near?'<small>รอบที่ใกล้ที่สุด</small>':'')+(closed?'<small>ปิดรอบแล้ว</small>':'')+'</span><input type="radio" name="cycle" value="'+k+'"'+(on?' checked':'')+(closed?' disabled':'')+'><i class="rd"></i></label>';}).join('')+'</div>'
+      +'<label class="lbl" for="fcycle">รอบเบิก (ทุกวันจันทร์และวันพฤหัสบดี)</label><select class="field" id="fcycle" name="cycle">'
+      +keys.map(k=>{const closed=!!S.cycles[k]&&k!==f.cycle;return '<option value="'+k+'"'+(f.cycle===k?' selected':'')+(closed?' disabled':'')+'>'+esc(dateLong(k))+(k===near?' • รอบที่ใกล้ที่สุด':'')+(closed?' — ปิดรอบแล้ว':'')+'</option>';}).join('')+'</select>'
       +'<span class="lbl">วันเวลาที่คีย์เบิก</span><div class="stamp"><b id="liveTs">'+esc(thDT(Date.now()))+'</b><span>บันทึกเวลาตามที่กดส่งใบเบิก</span></div>'
       +'<span class="lbl">ผู้เบิก</span><div class="stamp"><b>'+esc(f.editId&&f.editBy?f.editBy:fullName(S.user))+'</b><span>รหัส '+esc(S.user.id)+'</span></div>'
       +'<span class="lbl">หน่วยที่เบิก</span><div class="pills" role="radiogroup" aria-label="หน่วยที่เบิก">'
@@ -624,11 +665,11 @@ function submitForm(){
     if(edit.unit!==un.name)ch.push('เปลี่ยนหน่วย: '+edit.unit+' → '+un.name);
     if((edit.note||'')!==f.note.trim())ch.push('แก้หมายเหตุ');
     const log=(edit.log||[]).concat([{at:now,by:u.id,byName:fullName(u),type:'edit',changes:ch}]);
-    p=updDoc('requests/'+edit.id,{cycle:f.cycle,unitId:un.id,unit:un.name,items:items,note:f.note.trim(),editedAt:now,log:log}).then(()=>Object.assign({},edit,{cycle:f.cycle,unit:un.name,items:items,edited:true}));
+    p=updDoc('requests/'+edit.id,{cycle:f.cycle,unitId:un.id,unit:un.name,items:items,note:f.note.trim(),editedAt:now,log:log},'กำลังบันทึกการแก้ไข...').then(()=>Object.assign({},edit,{cycle:f.cycle,unit:un.name,items:items,edited:true}));
   }else{
     const no=makeNo(now);
     const req={no:no,createdAt:now,cycle:f.cycle,unitId:un.id,unit:un.name,requesterId:u.id,requesterName:fullName(u),items:items,note:f.note.trim(),status:'submitted',deleted:false,log:[{at:now,by:u.id,byName:fullName(u),type:'create',changes:['ส่งใบเบิก']}]};
-    p=setDoc('requests/'+no,req).then(()=>Object.assign({id:no},req));
+    p=setDoc('requests/'+no,req,'กำลังส่งใบเบิก...').then(()=>Object.assign({id:no},req));
   }
   p.then(r=>{
     f.done=r;f.cart={};f.note='';f.editId=null;f.editNo='';f.editBy='';f.names=null;S.step=1;saveDraft();renderForm();renderNav();window.scrollTo(0,0);
@@ -655,6 +696,14 @@ function cycleSelect(id,val){
 function changesOf(r,types){
   return (r.log||[]).filter(l=>types.indexOf(l.type)>=0);
 }
+function stepper(idx,cls){
+  const fin=idx>=3;
+  return '<div class="stepper'+(fin?' fin':'')+(cls?' '+cls:'')+'" role="list" aria-label="ขั้นตอนสถานะ">'+STAT.map((x,i)=>{
+    const st=i<idx||(fin&&i===3)?'done':i===idx?'cur':'';
+    return '<div class="s '+st+'" role="listitem"><span class="dot">'+(st==='done'?'✓':(i+1))+'</span><span class="lb">'+esc(x.t)+'</span></div>';
+  }).join('')+'</div>';
+}
+function nowLine(idx){return '<div class="nowst">ขณะนี้: <b>'+(idx>=3?'เสร็จสิ้น — ':'ขั้นที่ '+(idx+1)+' จาก 4 — ')+esc(STAT[idx].t)+'</b></div>';}
 function reqCard(r,mode){
   const idx=SIDX[r.status]||0,st=STAT[idx];
   const lk=lockInfo(r.id);
@@ -670,7 +719,7 @@ function reqCard(r,mode){
   }
   const logs=(r.log||[]).slice().reverse().map(l=>'<li>'+esc(thDTs(l.at))+' • '+esc(l.byName||'')+' — '+esc(l.type==='create'?'ส่งใบเบิก':l.type==='edit'?'แก้ไขใบเบิก':l.type==='admin_edit'?'แอดมินแก้ไข':l.type==='delete'?'ลบใบเบิก':l.type==='accept'?'แอดมินรับใบเบิก':l.type==='unaccept'?'ยกเลิกการรับใบเบิก':l.type==='ordered'?'แอดมินส่งเบิกแล้ว':l.type==='received'?'ได้รับพัสดุแล้ว':l.type)+((l.changes||[]).filter(c=>c&&c!=='ส่งใบเบิก').length?'<br>'+(l.changes||[]).filter(c=>c&&c!=='ส่งใบเบิก').map(esc).join('<br>'):'')+'</li>').join('');
   return '<article class="rq'+(r.requesterId===(S.user&&S.user.id)?' mine':'')+'" data-id="'+esc(r.id)+'"><div class="rhead"><span class="no">'+esc(r.no)+'</span><span class="st st'+idx+'">'+st.t+'</span></div>'
-    +'<div class="prog p'+idx+'">'+[0,1,2,3].map(i=>'<i class="'+(i<=idx?'on':'')+'"></i>').join('')+'</div>'
+    +stepper(idx)+nowLine(idx)
     +'<dl class="kv"><div><dt>รอบเบิก</dt><dd>'+esc(dateLong(r.cycle))+'</dd></div><div><dt>วันที่ทำการเบิก</dt><dd>'+esc(thDT(r.createdAt))+'</dd></div><div><dt>หน่วยที่เบิก</dt><dd>'+esc(r.unit)+'</dd></div><div><dt>ผู้เบิก</dt><dd>'+esc(r.requesterName)+'</dd></div></dl>'
     +'<ul class="items">'+r.items.map(i=>'<li><span>'+esc(i.name)+'</span><b>×'+i.qty+'</b></li>').join('')+'</ul>'
     +(r.note?'<div class="notebox">หมายเหตุ: '+esc(r.note)+'</div>':'')
@@ -695,13 +744,13 @@ function deleteReq(id){
   if(!r)return;
   if(r.status!=='submitted'||lockInfo(id)){toast('ลบไม่ได้แล้ว ใบเบิกนี้ถูกแอดมินรับหรือกำลังตรวจอยู่');delete S.confirmDel[id];renderStatus();return;}
   const now=Date.now();
-  updDoc('requests/'+id,{deleted:true,deletedAt:now,deletedBy:u.id,deletedByName:fullName(u),log:(r.log||[]).concat([{at:now,by:u.id,byName:fullName(u),type:'delete',changes:['ลบใบเบิก ('+r.items.length+' รายการ)']}])}).then(()=>{delete S.confirmDel[id];toast('ลบใบเบิกแล้ว (เก็บประวัติไว้)');}).catch(()=>{});
+  updDoc('requests/'+id,{deleted:true,deletedAt:now,deletedBy:u.id,deletedByName:fullName(u),log:(r.log||[]).concat([{at:now,by:u.id,byName:fullName(u),type:'delete',changes:['ลบใบเบิก ('+r.items.length+' รายการ)']}])},'กำลังลบใบเบิก...').then(()=>{delete S.confirmDel[id];toast('ลบใบเบิกแล้ว (เก็บประวัติไว้)');}).catch(()=>{});
 }
 
 /* ---------- admin ---------- */
-function acquireLock(id){
+function acquireLock(id,quiet){
   const u=S.user,ttl=20000;
-  return S.db.doc('locks/'+id).acquire({holder:u.id,ttlMs:ttl,data:{holderId:u.id,holderName:fullName(u),until:Date.now()+ttl}}).then(r=>!!r.acquired).catch(e=>{toast(errMsg(e));return false;});
+  return track(quiet?false:'กำลังเปิดใบเบิก...',S.db.doc('locks/'+id).acquire({holder:u.id,ttlMs:ttl,data:{holderId:u.id,holderName:fullName(u),until:Date.now()+ttl}})).then(r=>!!r.acquired).catch(e=>{toast(errMsg(e));return false;});
 }
 function releaseLock(){
   clearInterval(renewT);renewT=null;
@@ -710,7 +759,7 @@ function releaseLock(){
 }
 function startRenew(id){
   clearInterval(renewT);
-  renewT=setInterval(()=>{acquireLock(id).then(ok=>{if(!ok&&S.adOpen===id){toast('เสียสิทธิ์แก้ไขใบเบิกนี้ ลองเปิดใหม่');S.adDraft=null;S.adOpen=null;clearInterval(renewT);renderAdmin();}});},8000);
+  renewT=setInterval(()=>{acquireLock(id,true).then(ok=>{if(!ok&&S.adOpen===id){toast('เสียสิทธิ์แก้ไขใบเบิกนี้ ลองเปิดใหม่');S.adDraft=null;S.adOpen=null;clearInterval(renewT);renderAdmin();}});},8000);
 }
 function openReq(id){
   const r=reqById(id);if(!r)return;
@@ -737,15 +786,15 @@ function commitAdmin(accept){
   if(ch.length){patch.items=items;patch.adminEdited=true;patch.editedAt=now;log.push({at:now,by:u.id,byName:fullName(u),type:'admin_edit',changes:ch});}
   if(accept){patch.status='accepted';patch.acceptedAt=now;patch.acceptedBy=fullName(u);log.push({at:now,by:u.id,byName:fullName(u),type:'accept',changes:[]});}
   patch.log=log;
-  updDoc('requests/'+r.id,patch).then(()=>{toast(accept?'รับใบเบิกแล้ว':'บันทึกการแก้ไขแล้ว');if(accept){closeDetail();}else{d.items=items.map(i=>Object.assign({},i));renderAdmin();}}).catch(()=>{});
+  updDoc('requests/'+r.id,patch,accept?'กำลังรับใบเบิก...':'กำลังบันทึกการแก้ไข...').then(()=>{toast(accept?'รับใบเบิกแล้ว':'บันทึกการแก้ไขแล้ว');if(accept){closeDetail();}else{d.items=items.map(i=>Object.assign({},i));renderAdmin();}}).catch(()=>{});
 }
 function adminDelete(){
   const r=reqById(S.adOpen),u=S.user;if(!r)return;const now=Date.now();
-  updDoc('requests/'+r.id,{deleted:true,deletedAt:now,deletedBy:u.id,deletedByName:fullName(u),log:(r.log||[]).concat([{at:now,by:u.id,byName:fullName(u),type:'delete',changes:['แอดมินลบใบเบิกทั้งใบ']}])}).then(()=>{toast('ลบใบเบิกแล้ว (เก็บประวัติไว้)');closeDetail();}).catch(()=>{});
+  updDoc('requests/'+r.id,{deleted:true,deletedAt:now,deletedBy:u.id,deletedByName:fullName(u),log:(r.log||[]).concat([{at:now,by:u.id,byName:fullName(u),type:'delete',changes:['แอดมินลบใบเบิกทั้งใบ']}])},'กำลังลบใบเบิก...').then(()=>{toast('ลบใบเบิกแล้ว (เก็บประวัติไว้)');closeDetail();}).catch(()=>{});
 }
 function unaccept(id){
   const r=reqById(id),u=S.user;if(!r||r.status!=='accepted'||S.cycles[r.cycle]){toast('ยกเลิกการรับไม่ได้ รอบนี้รวมใบเบิกแล้ว');return;}
-  updDoc('requests/'+id,{status:'submitted',log:(r.log||[]).concat([{at:Date.now(),by:u.id,byName:fullName(u),type:'unaccept',changes:[]}])}).then(()=>{toast('ยกเลิกการรับแล้ว');closeDetail();}).catch(()=>{});
+  updDoc('requests/'+id,{status:'submitted',log:(r.log||[]).concat([{at:Date.now(),by:u.id,byName:fullName(u),type:'unaccept',changes:[]}])},'กำลังยกเลิกการรับ...').then(()=>{toast('ยกเลิกการรับแล้ว');closeDetail();}).catch(()=>{});
 }
 function mergeCycle(k){
   const rs=cycleReqs(k),u=S.user;
@@ -757,23 +806,30 @@ function mergeCycle(k){
   const rank={};S.items.forEach((it,i)=>{rank[it.id]=i;});
   order.sort((a,b)=>(rank[a]==null?9999:rank[a])-(rank[b]==null?9999:rank[b]));
   const doc={key:k,status:'merged',mergedAt:Date.now(),mergedBy:u.id,mergedByName:fullName(u),units:used,lines:order.map(id=>map[id]),reqNos:rs.map(r=>r.no)};
-  setDoc('cycles/'+k,doc).then(()=>toast('รวมใบเบิกแล้ว')).catch(()=>{});
+  setDoc('cycles/'+k,doc,'กำลังรวมใบเบิก...').then(()=>{
+    toast('รวมใบเบิกแล้ว ('+doc.lines.length+' รายการ จาก '+rs.length+' ใบเบิก)');
+    S.adCycle=k;renderAdmin();
+    setTimeout(()=>{const e=$('#mergedCard');if(e){e.scrollIntoView({behavior:'smooth',block:'start'});e.classList.add('flash');}},120);
+  }).catch(()=>{});
 }
 async function advanceCycle(k,to){
   const cy=S.cycles[k],u=S.user;if(!cy)return;
   const from=to==='ordered'?'merged':'ordered';
   if(cy.status!==from){toast('สถานะรอบเปลี่ยนไปแล้ว');return;}
   const now=Date.now(),patch={status:to};patch[to+'At']=now;patch[to+'By']=fullName(u);
+  let fin;const gate=new Promise(r=>{fin=r;});
+  track(to==='ordered'?'กำลังบันทึกสถานะ "ส่งเบิกแล้ว"...':'กำลังบันทึกสถานะ "ได้รับพัสดุแล้ว"...',gate);
   try{
-    await updDoc('cycles/'+k,patch);
+    await updDoc('cycles/'+k,patch,false);
     for(const r of cycleReqs(k)){
       const cur=reqById(r.id)||r;
-      await updDoc('requests/'+r.id,{status:to,log:(cur.log||[]).concat([{at:now,by:u.id,byName:fullName(u),type:to,changes:[]}])});
+      await updDoc('requests/'+r.id,{status:to,log:(cur.log||[]).concat([{at:now,by:u.id,byName:fullName(u),type:to,changes:[]}])},false);
     }
     toast(to==='ordered'?'บันทึกส่งเบิกแล้ว':'บันทึกได้รับพัสดุแล้ว');
   }catch(e){}
+  fin();
 }
-function unmerge(k){const cy=S.cycles[k];if(!cy||cy.status!=='merged'){toast('ยกเลิกการรวมไม่ได้ รอบนี้ส่งเบิกไปแล้ว');return;}delDoc('cycles/'+k).then(()=>toast('ยกเลิกการรวมแล้ว')).catch(()=>{});}
+function unmerge(k){const cy=S.cycles[k];if(!cy||cy.status!=='merged'){toast('ยกเลิกการรวมไม่ได้ รอบนี้ส่งเบิกไปแล้ว');return;}delDoc('cycles/'+k,'กำลังยกเลิกการรวม...').then(()=>toast('ยกเลิกการรวมแล้ว')).catch(()=>{});}
 
 function mergedTable(cy){
   const head='<tr><th class="n">#</th><th>รายการ</th>'+cy.units.map(n=>'<th class="n">'+esc(n)+'</th>').join('')+'<th class="n">รวม</th></tr>';
@@ -822,7 +878,7 @@ function renderAdmin(){
   const deleted=S.requests.filter(r=>r.deleted&&r.cycle===k);
   let merge='';
   if(cy){
-    merge='<div class="card"><div class="head"><h2>รายการเบิกทั้งแผนก</h2><span class="st st'+(cy.status==='merged'?1:cy.status==='ordered'?2:3)+'">'+CYC[cy.status]+'</span></div>'
+    merge='<div class="card" id="mergedCard"><div class="head"><h2>รายการเบิกทั้งแผนก</h2><span class="st st'+(cy.status==='merged'?1:cy.status==='ordered'?2:3)+'">'+CYC[cy.status]+'</span></div>'
       +'<p class="sub">รวมเมื่อ '+esc(thDT(cy.mergedAt))+' โดย '+esc(cy.mergedByName)+(cy.orderedAt?' • ส่งเบิกเมื่อ '+esc(thDT(cy.orderedAt)):'')+(cy.receivedAt?' • รับพัสดุเมื่อ '+esc(thDT(cy.receivedAt)):'')+'</p>'
       +mergedTable(cy)
       +'<div class="btns" style="margin-top:14px"><button class="btn p" data-a="xlsx" type="button">ดาวน์โหลด Excel</button>'
@@ -836,7 +892,7 @@ function renderAdmin(){
     +merge
     +'<div style="margin-top:16px">'+(rs.length?rs.slice().sort((a,b)=>b.createdAt-a.createdAt).map(r=>{
       const lk=lockInfo(r.id),idx=SIDX[r.status]||0,mine=lk&&lk.holderId===S.user.id;
-      return '<article class="rq"><div class="rhead"><span class="no">'+esc(r.no)+'</span><span class="st st'+idx+'">'+STAT[idx].t+'</span></div><dl class="kv"><div><dt>หน่วยที่เบิก</dt><dd>'+esc(r.unit)+'</dd></div><div><dt>ผู้เบิก</dt><dd>'+esc(r.requesterName)+'</dd></div><div><dt>วันที่ทำการเบิก</dt><dd>'+esc(thDT(r.createdAt))+'</dd></div><div><dt>รายการ</dt><dd>'+r.items.length+' รายการ • '+r.items.reduce((a,b)=>a+b.qty,0)+' ชิ้น</dd></div></dl>'
+      return '<article class="rq"><div class="rhead"><span class="no">'+esc(r.no)+'</span><span class="st st'+idx+'">'+STAT[idx].t+'</span></div>'+stepper(idx,'sm')+'<dl class="kv"><div><dt>หน่วยที่เบิก</dt><dd>'+esc(r.unit)+'</dd></div><div><dt>ผู้เบิก</dt><dd>'+esc(r.requesterName)+'</dd></div><div><dt>วันที่ทำการเบิก</dt><dd>'+esc(thDT(r.createdAt))+'</dd></div><div><dt>รายการ</dt><dd>'+r.items.length+' รายการ • '+r.items.reduce((a,b)=>a+b.qty,0)+' ชิ้น</dd></div></dl>'
         +((r.log||[]).some(l=>l.type==='admin_edit')?'<span class="tagw">แอดมินแก้ไขแล้ว</span> ':'')+((r.log||[]).some(l=>l.type==='edit')?'<span class="tagb">หน่วยแก้ไขแล้ว</span>':'')
         +'<div class="racts">'+(lk&&!mine?'<span class="lock why">กำลังตรวจโดย '+esc(lk.holderName)+'</span><button class="btn s" disabled type="button">เปิดไม่ได้</button>':'<span class="why"></span><button class="btn s '+(r.status==='submitted'?'p':'')+'" data-a="open" data-id="'+esc(r.id)+'" type="button">'+(r.status==='submitted'?'ตรวจใบเบิก':'ดูใบเบิก')+'</button>')+'</div></article>';
     }).join(''):'<div class="card empty">ยังไม่มีใบเบิกในรอบนี้</div>')+'</div>'
