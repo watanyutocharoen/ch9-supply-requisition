@@ -65,7 +65,7 @@ async function bump(q: any, c: string) {
 async function putDoc(q: any, c: string, id: string, data: any) {
   const j = JSON.stringify(data);
   if (j.length > 400000) throw new Error('too_large');
-  await q`insert into docs(coll,id,data,ver) values (${c},${id},${j}::jsonb,${Date.now()})
+  await q`insert into docs(coll,id,data,ver) values (${c},${id},${j}::text::jsonb,${Date.now()})
           on conflict (coll,id) do update set data=excluded.data, ver=excluded.ver`;
 }
 
