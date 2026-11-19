@@ -1,3 +1,9 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
 <title>ระบบเบิกพัสดุห้องยา CH9</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -153,6 +159,14 @@ select.field{appearance:none;-webkit-appearance:none;background-image:linear-gra
 .wbar .ws{color:var(--muted);font-size:14px;text-align:center;flex:1;min-width:0}
 
 /* summary table */
+.tw table{min-width:620px}
+.tw td:nth-child(2),.tw th:nth-child(2){min-width:190px;white-space:normal}
+.tw td:first-child,.tw th:first-child{width:36px}
+/* จอใหญ่: ขยายพื้นที่และตัวหนังสือให้อ่านง่าย */
+@media (min-width:1200px){.wrap{max-width:1280px}body{zoom:1.1}}
+@media (min-width:1700px){body{zoom:1.25}}
+/* มือถือ: ปุ่มกดใหญ่ขึ้น ตัวหนังสืออ่านง่าย */
+@media (max-width:520px){.btn{min-height:44px}.btn.s{min-height:38px}.tab{padding:10px 16px}.badge{font-size:13px}}
 .tw{overflow-x:auto;border:1px solid var(--line);border-radius:18px}
 table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
@@ -231,6 +245,8 @@ details.lg summary{cursor:pointer;color:var(--blue);font-size:14px;margin-top:10
 #toast.show{opacity:1;transform:translate(-50%,0)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
+</head>
+<body>
 
 <div id="app">
   <div id="v-load" class="wrap"><div class="ldv"><span class="spin"></span><span>กำลังโหลดข้อมูล...</span></div></div>
@@ -1134,3 +1150,5 @@ if(ses0&&ses0.token&&Date.now()-ses0.ts<12*3600*1000){API.token=ses0.token;show(
 else{lsDel('ch9sup2:session');show('login');renderLoginBanner();}
 })();
 </script>
+</body>
+</html>
