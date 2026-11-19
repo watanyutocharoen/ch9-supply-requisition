@@ -296,7 +296,7 @@ const CATS=['ทั้งหมด','กระดาษ','เครื่อง�
 const CAT_OPTS=CATS.slice(1);
 const STAT=[{k:'submitted',t:'หน่วยส่งใบเบิกพัสดุแล้ว'},{k:'accepted',t:'แอดมินรับใบเบิก'},{k:'ordered',t:'แอดมินส่งเบิกแล้ว'},{k:'received',t:'ได้รับพัสดุแล้ว'}];
 const SIDX={submitted:0,accepted:1,ordered:2,received:3};
-const CYC={merged:'รวมใบเบิกแล้ว',ordered:'ส่งเบิกแล้ว',received:'ได้รับพัสดุแล้ว'};
+const CYC={merged:'รวมใบเบิกแล้ว',ordered:'ส่งเบิกแล้ว',received:'ได้รับพัสดุแล้ว',revert:'ถอยสถานะ'};
 const DOW=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
 const MON_L=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 const MON_S=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -556,11 +556,15 @@ function doPw(e){
 }
 
 /* ---------- cycles ---------- */
-function nextOpenCycle(){const c=upcoming(6).find(k=>!S.cycles[k]);return c||upcoming(1)[0];}
+function nextOpenCycle(){const c=upcoming(6).find(k=>!batchesOf(k).length);return c||upcoming(1)[0];}
+function cycOf(cy){return cy.cycle||String(cy.key||cy.id).split('~')[0];}
+function batchesOf(k){return Object.values(S.cycles).filter(c=>cycOf(c)===k).sort((a,b)=>(a.mergedAt||0)-(b.mergedAt||0));}
+function batchFor(r){return Object.values(S.cycles).find(c=>(c.reqNos||[]).indexOf(r.no)>=0)||null;}
+function batchReqs(cy){return S.requests.filter(r=>!r.deleted&&(cy.reqNos||[]).indexOf(r.no)>=0);}
 function allCycleKeys(){
   const s=new Set(upcoming(4));
   S.requests.forEach(r=>{if(!r.deleted&&r.cycle)s.add(r.cycle);});
-  Object.keys(S.cycles).forEach(k=>s.add(k));
+  Object.values(S.cycles).forEach(c=>s.add(cycOf(c)));
   return Array.from(s).sort().reverse();
 }
 function latestCycle(){
@@ -588,7 +592,7 @@ function renderForm(){
     const near=nextOpenCycle();
     body='<div class="card"><h2>ใบเบิกใหม่</h2>'
       +'<label class="lbl" for="fcycle">รอบเบิก (ทุกวันจันทร์และวันพฤหัสบดี)</label><select class="field" id="fcycle" name="cycle">'
-      +keys.map(k=>{const closed=!!S.cycles[k]&&k!==f.cycle;return '<option value="'+k+'"'+(f.cycle===k?' selected':'')+(closed?' disabled':'')+'>'+esc(dateLong(k))+(k===near?' • รอบที่ใกล้ที่สุด':'')+(closed?' — ปิดรอบแล้ว':'')+'</option>';}).join('')+'</select>'
+      +keys.map(k=>{const closed=batchesOf(k).length>0;return '<option value="'+k+'"'+(f.cycle===k?' selected':'')+'>'+esc(dateLong(k))+(k===near?' • รอบที่ใกล้ที่สุด':'')+(closed?' — รวมไปแล้ว ใบใหม่จะรวมเพิ่ม':'')+'</option>';}).join('')+'</select>'
       +'<span class="lbl">วันเวลาที่คีย์เบิก</span><div class="stamp"><b id="liveTs">'+esc(thDT(Date.now()))+'</b><span>บันทึกเวลาตามที่กดส่งใบเบิก</span></div>'
       +'<span class="lbl">ผู้เบิก</span><div class="stamp"><b>'+esc(f.editId&&f.editBy?f.editBy:fullName(S.user))+'</b><span>รหัส '+esc(S.user.id)+'</span></div>'
       +'<span class="lbl">หน่วยที่เบิก</span><div class="pills" role="radiogroup" aria-label="หน่วยที่เบิก">'
@@ -653,7 +657,6 @@ function submitForm(){
   const un=unitById(f.unit);
   if(!f.cycle||!un||!Object.keys(f.cart).length){bad('ข้อมูลไม่ครบ ตรวจรอบเบิก หน่วย และรายการ');return;}
   const edit=f.editId?reqById(f.editId):null;
-  if(S.cycles[f.cycle]){bad('รอบเบิกนี้ปิดรอบแล้ว เลือกรอบอื่น');return;}
   const items=Object.keys(f.cart).map(id=>{const it=S.items.find(x=>x.id===id);return {id:id,name:it?it.name:((f.names&&f.names[id])||id),qty:f.cart[id]};});
   btn.disabled=true;
   const now=Date.now();
@@ -732,10 +735,10 @@ function renderStatus(){
   const rs=cycleReqs(S.stCycle).filter(r=>S.stUnit==='all'||r.unit===S.stUnit).sort((a,b)=>b.createdAt-a.createdAt);
   const unitNames=S.units.map(u=>u.name);
   cycleReqs(S.stCycle).forEach(r=>{if(unitNames.indexOf(r.unit)<0)unitNames.push(r.unit);});
-  const cy=S.cycles[S.stCycle];
+  const bs=batchesOf(S.stCycle);
   el.innerHTML='<div class="card"><div class="head"><h2>ติดตามสถานะการเบิก</h2><span class="badge">'+rs.length+' ใบเบิก</span></div>'
     +'<span class="lbl">รอบเบิก</span>'+cycleSelect('stCycle',S.stCycle)
-    +(cy?'<div class="banner blue" style="margin:12px 0 0"><span>รอบนี้'+CYC[cy.status]+' แล้ว</span></div>':'')
+    +(bs.length?'<div class="banner blue" style="margin:12px 0 0"><span>'+bs.map((c,i)=>(bs.length>1?'ชุดที่ '+(i+1)+': ':'รอบนี้')+CYC[c.status]).join(' • ')+'</span></div>':'')
     +'<div class="chips"><button class="chip" data-a="stunit" data-u="all" aria-pressed="'+(S.stUnit==='all')+'" type="button">ทุกหน่วย</button>'+unitNames.map(n=>'<button class="chip" data-a="stunit" data-u="'+esc(n)+'" aria-pressed="'+(S.stUnit===n)+'" type="button">'+esc(n)+'</button>').join('')+'</div></div>'
     +'<div style="margin-top:16px">'+(rs.length?rs.map(r=>reqCard(r,'status')).join(''):'<div class="card empty">ยังไม่มีใบเบิกในรอบนี้</div>')+'</div>';
 }
@@ -793,21 +796,23 @@ function adminDelete(){
   updDoc('requests/'+r.id,{deleted:true,deletedAt:now,deletedBy:u.id,deletedByName:fullName(u),log:(r.log||[]).concat([{at:now,by:u.id,byName:fullName(u),type:'delete',changes:['แอดมินลบใบเบิกทั้งใบ']}])},'กำลังลบใบเบิก...').then(()=>{toast('ลบใบเบิกแล้ว (เก็บประวัติไว้)');closeDetail();}).catch(()=>{});
 }
 function unaccept(id){
-  const r=reqById(id),u=S.user;if(!r||r.status!=='accepted'||S.cycles[r.cycle]){toast('ยกเลิกการรับไม่ได้ รอบนี้รวมใบเบิกแล้ว');return;}
+  const r=reqById(id),u=S.user;if(!r||r.status!=='accepted'||batchFor(r)){toast('ยกเลิกการรับไม่ได้ ใบเบิกนี้ถูกรวมแล้ว ให้ยกเลิกการรวมก่อน');return;}
   updDoc('requests/'+id,{status:'submitted',log:(r.log||[]).concat([{at:Date.now(),by:u.id,byName:fullName(u),type:'unaccept',changes:[]}])},'กำลังยกเลิกการรับ...').then(()=>{toast('ยกเลิกการรับแล้ว');closeDetail();}).catch(()=>{});
 }
 function mergeCycle(k){
-  const rs=cycleReqs(k),u=S.user;
-  if(!rs.length||rs.some(r=>r.status!=='accepted')||S.cycles[k]){toast('รวมไม่ได้ ต้องรับใบเบิกทุกใบในรอบนี้ก่อน');return;}
+  const rs=cycleReqs(k).filter(r=>!batchFor(r)),u=S.user;
+  if(!rs.length||rs.some(r=>r.status!=='accepted')){toast('รวมไม่ได้ ต้องรับใบเบิกที่ยังไม่ได้รวมให้ครบก่อน');return;}
+  let n=1;while(S.cycles[n===1?k:k+'~'+n])n++;
+  const id=n===1?k:k+'~'+n;
   const units=S.units.map(x=>x.name);rs.forEach(r=>{if(units.indexOf(r.unit)<0)units.push(r.unit);});
   const used=units.filter(n=>rs.some(r=>r.unit===n));
   const map={},order=[];
   rs.forEach(r=>r.items.forEach(i=>{if(!map[i.id]){map[i.id]={id:i.id,name:i.name,total:0,q:used.map(()=>0)};order.push(i.id);}const m=map[i.id];m.total+=i.qty;m.q[used.indexOf(r.unit)]+=i.qty;}));
   const rank={};S.items.forEach((it,i)=>{rank[it.id]=i;});
   order.sort((a,b)=>(rank[a]==null?9999:rank[a])-(rank[b]==null?9999:rank[b]));
-  const doc={key:k,status:'merged',mergedAt:Date.now(),mergedBy:u.id,mergedByName:fullName(u),units:used,lines:order.map(id=>map[id]),reqNos:rs.map(r=>r.no)};
-  setDoc('cycles/'+k,doc,'กำลังรวมใบเบิก...').then(()=>{
-    toast('รวมใบเบิกแล้ว ('+doc.lines.length+' รายการ จาก '+rs.length+' ใบเบิก)');
+  const doc={key:id,cycle:k,batch:n,status:'merged',mergedAt:Date.now(),mergedBy:u.id,mergedByName:fullName(u),units:used,lines:order.map(id=>map[id]),reqNos:rs.map(r=>r.no)};
+  setDoc('cycles/'+id,doc,'กำลังรวมใบเบิก...').then(()=>{
+    toast((n>1?'รวมเพิ่ม (ชุดที่ '+n+') ':'รวมใบเบิกแล้ว ')+'('+doc.lines.length+' รายการ จาก '+rs.length+' ใบเบิก)');
     S.adCycle=k;renderAdmin();
     setTimeout(()=>{const e=$('#mergedCard');if(e){e.scrollIntoView({behavior:'smooth',block:'start'});e.classList.add('flash');}},120);
   }).catch(()=>{});
@@ -821,7 +826,7 @@ async function advanceCycle(k,to){
   track(to==='ordered'?'กำลังบันทึกสถานะ "ส่งเบิกแล้ว"...':'กำลังบันทึกสถานะ "ได้รับพัสดุแล้ว"...',gate);
   try{
     await updDoc('cycles/'+k,patch,false);
-    for(const r of cycleReqs(k)){
+    for(const r of batchReqs(cy)){
       const cur=reqById(r.id)||r;
       await updDoc('requests/'+r.id,{status:to,log:(cur.log||[]).concat([{at:now,by:u.id,byName:fullName(u),type:to,changes:[]}])},false);
     }
@@ -829,7 +834,23 @@ async function advanceCycle(k,to){
   }catch(e){}
   fin();
 }
-function unmerge(k){const cy=S.cycles[k];if(!cy||cy.status!=='merged'){toast('ยกเลิกการรวมไม่ได้ รอบนี้ส่งเบิกไปแล้ว');return;}delDoc('cycles/'+k,'กำลังยกเลิกการรวม...').then(()=>toast('ยกเลิกการรวมแล้ว')).catch(()=>{});}
+async function backCycle(k){
+  const cy=S.cycles[k],u=S.user;if(!cy||cy.status==='merged')return;
+  const to=cy.status==='received'?'ordered':'merged',reqSt=to==='ordered'?'ordered':'accepted';
+  const now=Date.now(),patch={status:to};if(cy.status==='received'){patch.receivedAt=null;patch.receivedBy=null;}else{patch.orderedAt=null;patch.orderedBy=null;}
+  let fin;const gate=new Promise(r=>{fin=r;});
+  track('กำลังถอยสถานะ...',gate);
+  try{
+    await updDoc('cycles/'+k,patch,false);
+    for(const r of batchReqs(cy)){
+      const cur=reqById(r.id)||r;
+      await updDoc('requests/'+r.id,{status:reqSt,log:(cur.log||[]).concat([{at:now,by:u.id,byName:fullName(u),type:'revert',changes:['ถอยสถานะเป็น "'+(to==='ordered'?'ส่งเบิกแล้ว':'แอดมินรับใบเบิก')+'"']}])},false);
+    }
+    toast('ถอยสถานะแล้ว');
+  }catch(e){}
+  fin();
+}
+function unmerge(k){const cy=S.cycles[k];if(!cy||cy.status!=='merged'){toast('ยกเลิกการรวมไม่ได้ ชุดนี้ส่งเบิกไปแล้ว ให้ถอยสถานะก่อน');return;}delDoc('cycles/'+k,'กำลังยกเลิกการรวม...').then(()=>toast('ยกเลิกการรวมแล้ว')).catch(()=>{});}
 
 function mergedTable(cy){
   const head='<tr><th class="n">#</th><th>รายการ</th>'+cy.units.map(n=>'<th class="n">'+esc(n)+'</th>').join('')+'<th class="n">รวม</th></tr>';
@@ -839,15 +860,15 @@ function mergedTable(cy){
 }
 function exportCycle(k){
   const cy=S.cycles[k];if(!cy)return;
-  const rs=cycleReqs(k);
+  const rs=batchReqs(cy),ck=cycOf(cy),bn=cy.batch||1;
   const title='ใบเบิกพัสดุรวมทั้งแผนก ห้องยา โรงพยาบาลจุฬารัตน์ 9 แอร์พอร์ต';
   const head=['ลำดับ','รายการ'].concat(cy.units).concat(['รวม']);
-  const a=[[title],['รอบเบิก: '+dateLong(k)],['รวมใบเบิกเมื่อ: '+thDT(cy.mergedAt)+' โดย '+cy.mergedByName],[],head];
+  const a=[[title],['รอบเบิก: '+dateLong(ck)+(bn>1?' (รวมเพิ่ม ชุดที่ '+bn+')':'')],['รวมใบเบิกเมื่อ: '+thDT(cy.mergedAt)+' โดย '+cy.mergedByName],[],head];
   cy.lines.forEach((l,i)=>a.push([i+1,l.name].concat(l.q.map(q=>q||'')).concat([l.total])));
   a.push(['','รวม'].concat(cy.units.map((n,i)=>cy.lines.reduce((s,l)=>s+l.q[i],0))).concat([cy.lines.reduce((s,l)=>s+l.total,0)]));
   const b=[['เลขที่ใบเบิก','วันที่ทำการเบิก','หน่วยที่เบิก','ผู้เบิก','รายการ','จำนวน','หมายเหตุ']];
   rs.forEach(r=>r.items.forEach(i=>b.push([r.no,thDT(r.createdAt),r.unit,r.requesterName,i.name,i.qty,r.note||''])));
-  const fname='ใบเบิกพัสดุรวม_'+k+'.xlsx';
+  const fname='ใบเบิกพัสดุรวม_'+ck+(bn>1?'_ชุด'+bn:'')+'.xlsx';
   const X=window.XLSX;
   if(X){
     const wb=X.utils.book_new(),w1=X.utils.aoa_to_sheet(a),w2=X.utils.aoa_to_sheet(b);
@@ -871,24 +892,26 @@ function renderAdmin(){
   if(!isAdmin()){el.innerHTML='<div class="card empty">เมนูนี้สำหรับแอดมินเท่านั้น</div>';return;}
   if(S.adOpen){renderDetail(el);return;}
   if(!S.adCycle)S.adCycle=latestCycle();
-  const k=S.adCycle,rs=cycleReqs(k),cy=S.cycles[k];
+  const k=S.adCycle,rs=cycleReqs(k),bs=batchesOf(k);
   const cnt=[0,1,2,3].map(i=>rs.filter(r=>(SIDX[r.status]||0)===i).length);
-  const allAcc=rs.length>0&&rs.every(r=>r.status==='accepted');
-  const pend=rs.filter(r=>r.status==='submitted').length;
+  const unm=rs.filter(r=>!batchFor(r)),allAcc=unm.length>0&&unm.every(r=>r.status==='accepted');
+  const pend=unm.filter(r=>r.status==='submitted').length;
   const deleted=S.requests.filter(r=>r.deleted&&r.cycle===k);
   let merge='';
-  if(cy){
-    merge='<div class="card" id="mergedCard"><div class="head"><h2>รายการเบิกทั้งแผนก</h2><span class="st st'+(cy.status==='merged'?1:cy.status==='ordered'?2:3)+'">'+CYC[cy.status]+'</span></div>'
-      +'<p class="sub">รวมเมื่อ '+esc(thDT(cy.mergedAt))+' โดย '+esc(cy.mergedByName)+(cy.orderedAt?' • ส่งเบิกเมื่อ '+esc(thDT(cy.orderedAt)):'')+(cy.receivedAt?' • รับพัสดุเมื่อ '+esc(thDT(cy.receivedAt)):'')+'</p>'
+  bs.forEach((cy,bi)=>{
+    const kk=esc(cy.id),last=bi===bs.length-1;
+    merge+='<div class="card" '+(last?'id="mergedCard" ':'')+'style="margin-top:16px"><div class="head"><h2>รายการเบิกทั้งแผนก'+(bs.length>1?' • ชุดที่ '+(bi+1):'')+'</h2><span class="st st'+(cy.status==='merged'?1:cy.status==='ordered'?2:3)+'">'+CYC[cy.status]+'</span></div>'
+      +'<p class="sub">รวมเมื่อ '+esc(thDT(cy.mergedAt))+' โดย '+esc(cy.mergedByName)+(cy.orderedAt?' • ส่งเบิกเมื่อ '+esc(thDT(cy.orderedAt)):'')+(cy.receivedAt?' • รับพัสดุเมื่อ '+esc(thDT(cy.receivedAt)):'')+' • '+(cy.reqNos||[]).length+' ใบเบิก</p>'
       +mergedTable(cy)
-      +'<div class="btns" style="margin-top:14px"><button class="btn p" data-a="xlsx" type="button">ดาวน์โหลด Excel</button>'
-      +(cy.status==='merged'?'<button class="btn ok" data-a="ordered" type="button">ส่งเบิกแล้ว</button><button class="btn d" data-a="unmerge" type="button">ยกเลิกการรวม</button>':'')
-      +(cy.status==='ordered'?'<button class="btn ok" data-a="received" type="button">ได้รับพัสดุแล้ว</button>':'')+'</div></div>';
-  }
+      +'<div class="btns" style="margin-top:14px"><button class="btn p" data-a="xlsx" data-k="'+kk+'" type="button">ดาวน์โหลด Excel</button>'
+      +(cy.status==='merged'?'<button class="btn ok" data-a="ordered" data-k="'+kk+'" type="button">ส่งเบิกแล้ว</button><button class="btn d" data-a="unmerge" data-k="'+kk+'" type="button">ยกเลิกการรวม</button>':'')
+      +(cy.status==='ordered'?'<button class="btn ok" data-a="received" data-k="'+kk+'" type="button">ได้รับพัสดุแล้ว</button><button class="btn" data-a="cyc-back" data-k="'+kk+'" type="button">ถอยสถานะ (กลับไป รวมใบเบิกแล้ว)</button>':'')
+      +(cy.status==='received'?'<button class="btn" data-a="cyc-back" data-k="'+kk+'" type="button">ถอยสถานะ (กลับไป ส่งเบิกแล้ว)</button>':'')+'</div></div>';
+  });
   el.innerHTML='<div class="card"><div class="head"><h2>จัดการการเบิกพัสดุ</h2><span class="badge">'+rs.length+' ใบเบิก</span></div>'
     +'<span class="lbl">รอบเบิก</span>'+cycleSelect('adCycle',k)
     +'<div class="sumrow">'+STAT.map((s,i)=>'<span class="st st'+i+'">'+s.t+' '+cnt[i]+'</span>').join('')+'</div>'
-    +(cy?'':'<div class="btns" style="margin-top:14px"><button class="btn r" data-a="merge" type="button"'+(allAcc?'':' disabled')+'>รวมใบเบิก</button><span class="sub">'+(allAcc?'รับครบทุกใบแล้ว กดรวมเพื่อสร้างรายการเบิกทั้งแผนก':(rs.length?'ต้องรับใบเบิกให้ครบก่อน เหลือ '+pend+' ใบ':'ยังไม่มีใบเบิกในรอบนี้'))+'</span></div>')+'</div>'
+    +(unm.length||!bs.length?'<div class="btns" style="margin-top:14px"><button class="btn r" data-a="merge" type="button"'+(allAcc?'':' disabled')+'>'+(bs.length?'รวมใบเบิกเพิ่ม (ชุดที่ '+(bs.length+1)+')':'รวมใบเบิก')+'</button><span class="sub">'+(allAcc?'รับครบทุกใบแล้ว กดรวมเพื่อสร้างรายการเบิกทั้งแผนก':(unm.length?'ต้องรับใบเบิกให้ครบก่อน เหลือ '+pend+' ใบ':'ยังไม่มีใบเบิกในรอบนี้'))+'</span></div>':'')+'</div>'
     +merge
     +'<div style="margin-top:16px">'+(rs.length?rs.slice().sort((a,b)=>b.createdAt-a.createdAt).map(r=>{
       const lk=lockInfo(r.id),idx=SIDX[r.status]||0,mine=lk&&lk.holderId===S.user.id;
@@ -913,9 +936,9 @@ function renderDetail(el){
     +(edit?'<div class="adminnote" id="adBar"'+(ch.length?'':' hidden')+'><b>การแก้ไขที่ยังไม่บันทึก</b><ul id="adCh">'+ch.map(c=>'<li>'+esc(c)+'</li>').join('')+'</ul></div>':'')
     +'<div class="racts">'
     +(edit?'<button class="btn" data-a="ad-save" type="button">บันทึกการแก้ไข</button><button class="btn ok" data-a="ad-accept" type="button">รับใบเบิก</button>'+(S.adConfirm==='del'?'<button class="btn d" data-a="ad-del-yes" type="button">ยืนยันลบทั้งใบ</button><button class="btn s" data-a="ad-del-no" type="button">ยกเลิก</button>':'<button class="btn d" data-a="ad-del" type="button">ลบใบเบิกทั้งใบ</button>')
-      :(r.status==='accepted'&&!S.cycles[r.cycle]?'<button class="btn d" data-a="unaccept" data-id="'+esc(r.id)+'" type="button">ยกเลิกการรับใบเบิก</button>':'<span class="why">'+(r.status==='submitted'?'':'ใบเบิกนี้รับแล้ว แก้ไขไม่ได้')+'</span>'))
+      :(r.status==='accepted'&&!batchFor(r)?'<button class="btn d" data-a="unaccept" data-id="'+esc(r.id)+'" type="button">ยกเลิกการรับใบเบิก</button>':'<span class="why">'+(r.status==='submitted'?'':'ใบเบิกนี้รับแล้ว แก้ไขไม่ได้')+'</span>'))
     +'<span class="why"></span><button class="btn" data-a="ad-close" type="button">'+(edit?'ปิด (ไม่รับ)':'กลับ')+'</button></div>'
-    +'<details class="lg"><summary>ประวัติการแก้ไข ('+(r.log||[]).length+')</summary><ul class="log">'+(r.log||[]).slice().reverse().map(l=>'<li>'+esc(thDTs(l.at))+' • '+esc(l.byName||'')+' — '+esc({create:'ส่งใบเบิก',edit:'แก้ไขใบเบิก',admin_edit:'แอดมินแก้ไข',accept:'แอดมินรับใบเบิก',unaccept:'ยกเลิกการรับ',delete:'ลบ',ordered:'ส่งเบิกแล้ว',received:'ได้รับพัสดุแล้ว'}[l.type]||l.type)+((l.changes||[]).filter(c=>c&&c!=='ส่งใบเบิก').length?'<br>'+(l.changes||[]).filter(c=>c&&c!=='ส่งใบเบิก').map(esc).join('<br>'):'')+'</li>').join('')+'</ul></details></div>';
+    +'<details class="lg"><summary>ประวัติการแก้ไข ('+(r.log||[]).length+')</summary><ul class="log">'+(r.log||[]).slice().reverse().map(l=>'<li>'+esc(thDTs(l.at))+' • '+esc(l.byName||'')+' — '+esc({create:'ส่งใบเบิก',edit:'แก้ไขใบเบิก',admin_edit:'แอดมินแก้ไข',accept:'แอดมินรับใบเบิก',unaccept:'ยกเลิกการรับ',delete:'ลบ',ordered:'ส่งเบิกแล้ว',received:'ได้รับพัสดุแล้ว',revert:'ถอยสถานะ'}[l.type]||l.type)+((l.changes||[]).filter(c=>c&&c!=='ส่งใบเบิก').length?'<br>'+(l.changes||[]).filter(c=>c&&c!=='ส่งใบเบิก').map(esc).join('<br>'):'')+'</li>').join('')+'</ul></details></div>';
 }
 function syncDraftBar(){
   const bar=$('#adBar'),ul=$('#adCh');if(!bar||!S.adDraft)return;
@@ -1010,10 +1033,11 @@ document.addEventListener('click',e=>{
     case 'adec':case 'ainc':{const li=rowOf(b),it=S.adDraft.items.find(x=>x.id===li.getAttribute('data-id'));it.qty=a==='ainc'?Math.min(9999,it.qty+1):Math.max(1,it.qty-1);li.querySelector('input').value=it.qty;syncDraftBar();break;}
     case 'adel':{const id=rowOf(b).getAttribute('data-id');S.adDraft.items=S.adDraft.items.filter(x=>x.id!==id);renderAdmin();break;}
     case 'merge':mergeCycle(S.adCycle);break;
-    case 'xlsx':exportCycle(S.adCycle);break;
-    case 'ordered':advanceCycle(S.adCycle,'ordered');break;
-    case 'received':advanceCycle(S.adCycle,'received');break;
-    case 'unmerge':unmerge(S.adCycle);break;
+    case 'xlsx':exportCycle(b.getAttribute('data-k'));break;
+    case 'ordered':advanceCycle(b.getAttribute('data-k'),'ordered');break;
+    case 'received':advanceCycle(b.getAttribute('data-k'),'received');break;
+    case 'unmerge':unmerge(b.getAttribute('data-k'));break;
+    case 'cyc-back':backCycle(b.getAttribute('data-k'));break;
     /* settings */
     case 'setsub':S.setSub=b.getAttribute('data-s');S.setEdit=null;S.setConfirm=null;renderSettings();break;
     case 'set-cancel':S.setEdit=null;S.setConfirm=null;renderSettings();break;
